@@ -1,243 +1,363 @@
 """
-Autoenveloper API — FastAPI server
-ChatGPT-compatible: serves OpenAPI spec + ai-plugin.json manifest.
+EVEZ Autoenveloper API v2 — Full Mathematical Surface
+ChatGPT-compatible via OpenAPI schema + ai-plugin.json
 
 Endpoints:
-  POST /cipher        — cipher generation & cross-domain isomorphism
-  POST /geometric     — geometric / spectral / fractal analysis
-  POST /linguistic    — n-gram, style fingerprint, anonymization
-  GET  /health        — health check
-  GET  /.well-known/ai-plugin.json   — ChatGPT plugin manifest
+  POST /isomorphism    — Φ(x) fingerprint + S(x,y) similarity
+  POST /ricci-flow     — Curvature smoothing on embedding vectors
+  POST /entropy-field  — Local entropy tensor over sequence
+  POST /gradient-tunnel — Loss surface tunneling escape
+  POST /horizon        — Context event horizon + Hawking radiation
+  POST /cipher         — Cipher gen + structural isomorphism (legacy)
+  POST /geometric      — Fractal dimension, spectral, symmetry
+  POST /linguistic     — N-gram, authorship fingerprint, PII mask
+  GET  /health         — System status
+  GET  /openapi.json   — OpenAPI 3.1 schema
+  GET  /.well-known/ai-plugin.json — ChatGPT plugin manifest
 """
-
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import os, sys, time, json
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import List, Optional, Dict, Any
 
-from lib.ciphage_gen import (
-    generate_substitution_cipher,
-    generate_polyalphabetic_cipher,
-    generate_transposition_matrix,
-    generate_recursive_numeric_pattern,
-    compare_structures,
-)
-from lib.geometric import (
-    compute_centroid,
-    compute_convex_hull_area,
-    compute_fractal_dimension,
-    detect_symmetry,
-    spectral_analysis,
-)
-from lib.linguistic import (
-    ngram_profile,
-    style_fingerprint,
-    anonymize_text,
-    detect_patterns,
+# ── Math modules
+from lib.math_invariants import fingerprint, similarity, flatten
+from lib.spacetime_ops import (
+    ricci_flow, entropy_field, gradient_tunnel, context_horizon
 )
 
-# ── App ───────────────────────────────────────────────────────────────────────
+# ── Legacy modules (if present)
+try:
+    from lib.ciphage_gen import (
+        generate_substitution_cipher, generate_polyalphabetic_cipher,
+        generate_transposition_cipher, generate_lsystem_fractal,
+        generate_numeric_sequence, detect_structural_isomorphism
+    )
+    CIPHAGE_AVAILABLE = True
+except ImportError:
+    CIPHAGE_AVAILABLE = False
+
+try:
+    from lib.geometric import (
+        compute_fractal_dimension, compute_spectral_analysis,
+        compute_rotational_symmetry, compute_convex_hull_area,
+        compute_centroid
+    )
+    GEOMETRIC_AVAILABLE = True
+except ImportError:
+    GEOMETRIC_AVAILABLE = False
+
+try:
+    from lib.linguistic import (
+        compute_ngram_profile, compute_authorship_fingerprint,
+        anonymize_pii
+    )
+    LINGUISTIC_AVAILABLE = True
+except ImportError:
+    LINGUISTIC_AVAILABLE = False
+
+
+# ══════════════════════════════════════════════════════════════
 app = FastAPI(
-    title       = "Autoenveloper",
-    description = (
-        "Cross-domain pattern toolkit: cipher generation, structural isomorphism "
-        "detection, geometric & spectral analysis, linguistic fingerprinting, "
-        "and text anonymization."
-    ),
-    version = "1.0.0",
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    title="EVEZ Autoenveloper",
+    description="Multi-basis structural invariant detector + spacetime operators. "
+                "Fingerprints any sequence with compression, mutual information, "
+                "spectral gap, and persistence entropy. Cross-domain isomorphism "
+                "detection, Ricci flow, entropy fields, gradient tunneling.",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-BASE_URL = os.getenv("BASE_URL", "https://autoenveloper.fly.dev")
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
 
-# ── Request models ────────────────────────────────────────────────────────────
+START_TIME = time.time()
+
+
+# ══════════════════════════════════════════════════════════════
+# SCHEMAS
+# ══════════════════════════════════════════════════════════════
+
+class IsoRequest(BaseModel):
+    domain_a: str = Field(..., description="First domain / sequence to fingerprint")
+    domain_b: str = Field(..., description="Second domain / sequence to fingerprint")
+
+class IsoResponse(BaseModel):
+    similarity: float = Field(..., description="S(x,y) in [0,1], 1=structurally identical")
+    vector_a: List[float]
+    vector_b: List[float]
+    breakdown: Dict[str, Any]
+
+class RicciRequest(BaseModel):
+    embeddings: List[List[float]] = Field(...,
+        description="List of embedding vectors (token/concept representations)")
+    iterations: int = Field(10, ge=1, le=50)
+    dt: float = Field(0.01, gt=0, le=0.1, description="Flow step size")
+
+class EntropyRequest(BaseModel):
+    sequence: str = Field(..., description="Token sequence or text")
+    window_size: int = Field(16, ge=4, le=256)
+    stride: int = Field(4, ge=1, le=64)
+
+class TunnelRequest(BaseModel):
+    loss_surface: List[float] = Field(...,
+        description="Sampled loss values along a 1D slice")
+    noise_scale: float = Field(0.1, gt=0, le=2.0)
+    hessian_approx: bool = True
+
+class HorizonRequest(BaseModel):
+    sequence: str = Field(..., description="Long sequence to bifurcate at context boundary")
+    window_size: int = Field(512, ge=16, le=8192)
+    radiation_dims: int = Field(32, ge=4, le=128)
 
 class CipherRequest(BaseModel):
-    mode: Literal["substitution","polyalphabetic","transposition","fractal","isomorphism"] = Field(
-        description="substitution|polyalphabetic|transposition|fractal|isomorphism"
-    )
-    seed: Optional[str]  = Field(None, description="Seed string for deterministic ciphers")
-    text: Optional[str]  = Field(None, description="Text to encode")
-    period: Optional[int] = Field(5,  description="Period for polyalphabetic cipher")
-    size:   Optional[int] = Field(8,  description="Matrix size for transposition")
-    mode_seq: Optional[Literal["collatz","fibonacci","logistic"]] = Field(
-        "collatz", description="Fractal sequence variant"
-    )
-    start:    Optional[int] = Field(27, description="Seed integer for fractal sequence")
-    steps:    Optional[int] = Field(30, description="Steps for fractal sequence")
-    domain_a: Optional[str] = Field(None, description="First domain string for isomorphism")
-    domain_b: Optional[str] = Field(None, description="Second domain string for isomorphism")
-
+    mode: str = Field("substitution",
+        description="Mode: substitution | polyalphabetic | transposition | lsystem | numeric | isomorphism")
+    text: Optional[str] = None
+    seed: Optional[str] = None
+    domain_a: Optional[str] = None
+    domain_b: Optional[str] = None
+    sequence_type: Optional[str] = None
+    rule: Optional[str] = None
+    steps: Optional[int] = None
+    n: Optional[int] = None
 
 class GeometricRequest(BaseModel):
-    operation: Literal["centroid","area","fractal_dim","symmetry","spectral"] = Field(
-        description="centroid|area|fractal_dim|symmetry|spectral"
-    )
-    points:   Optional[list[list[float]]] = Field(None, description="[[x,y], ...] point list")
-    sequence: Optional[list[float]]       = Field(None, description="1D numeric sequence")
-    symmetry_order: Optional[int] = Field(6, description="Rotational order to test (default 6)")
-
+    mode: str = Field("fractal",
+        description="Mode: fractal | spectral | symmetry | hull | centroid")
+    points: Optional[List[List[float]]] = None
+    sequence: Optional[str] = None
+    signal: Optional[List[float]] = None
 
 class LinguisticRequest(BaseModel):
-    operation: Literal["ngram","fingerprint","anonymize","detect_patterns"] = Field(
-        description="ngram|fingerprint|anonymize|detect_patterns"
-    )
-    text:        str           = Field(description="Input text")
-    n:           Optional[int] = Field(2, description="N-gram size")
-    top_k:       Optional[int] = Field(20, description="Top K n-grams")
-    strategy:    Optional[Literal["redact","pseudonymize","generalize"]] = Field(
-        "redact", description="Anonymization strategy"
-    )
+    mode: str = Field("ngram", description="Mode: ngram | authorship | anonymize")
+    text: str
+    n: Optional[int] = 2
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════
+# ENDPOINTS
+# ══════════════════════════════════════════════════════════════
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "uptime_s": round(time.time() - START_TIME, 1),
+        "modules": {
+            "math_invariants": True,
+            "spacetime_ops": True,
+            "ciphage": CIPHAGE_AVAILABLE,
+            "geometric": GEOMETRIC_AVAILABLE,
+            "linguistic": LINGUISTIC_AVAILABLE,
+        }
+    }
 
 
-@app.post("/cipher", summary="Cipher generation & structural isomorphism")
-def cipher(req: CipherRequest) -> dict:
+@app.post("/isomorphism", response_model=IsoResponse)
+def isomorphism(req: IsoRequest):
     """
-    Generate cipher patterns or detect structural isomorphism between two text domains.
+    Compute Φ(x) fingerprint vectors and S(x,y) structural similarity.
 
-    **modes:**
-    - `substitution` — deterministic letter-substitution cipher from `seed`
-    - `polyalphabetic` — multi-alphabet (Vigenère-style) cipher from `seed`
-    - `transposition` — matrix transposition grid cipher
-    - `fractal` — recursive numeric sequence (collatz / fibonacci / logistic)
-    - `isomorphism` — structural similarity score between `domain_a` and `domain_b`
-    """
-    try:
-        m = req.mode
-        if m == "substitution":
-            if not req.seed: raise HTTPException(400, "seed required")
-            r = generate_substitution_cipher(req.seed)
-            if req.text:
-                enc = list(req.text)
-                for i, ch in enumerate(req.text):
-                    if ch.lower() in r["encrypt"]:
-                        enc[i] = r["encrypt"][ch.lower()]
-                r["encoded"] = "".join(enc)
-            return r
+    Φ(x) = [C(x), I₁..I₅(x), λ₂(x), Hₚ(x)]
+    S(x,y) = √( cos(Φx,Φy) · (1 - JS(Φx,Φy)) )
 
-        if m == "polyalphabetic":
-            if not req.seed: raise HTTPException(400, "seed required")
-            return generate_polyalphabetic_cipher(req.seed, req.period or 5)
-
-        if m == "transposition":
-            if not req.seed: raise HTTPException(400, "seed required")
-            return generate_transposition_matrix(req.seed, req.size or 8)
-
-        if m == "fractal":
-            return generate_recursive_numeric_pattern(
-                req.start or 27, req.steps or 30, req.mode_seq or "collatz"
-            )
-
-        if m == "isomorphism":
-            if not req.domain_a or not req.domain_b:
-                raise HTTPException(400, "domain_a and domain_b required")
-            return compare_structures(req.domain_a, req.domain_b)
-
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(500, str(e))
-
-
-@app.post("/geometric", summary="Geometric & spectral pattern analysis")
-def geometric(req: GeometricRequest) -> dict:
-    """
-    Analyse geometric and spectral patterns.
-
-    **operations:**
-    - `centroid` — centre of mass for a point cloud
-    - `area` — convex-hull area (shoelace formula)
-    - `fractal_dim` — fractal dimension of a 1D sequence
-    - `symmetry` — rotational symmetry detection
-    - `spectral` — DFT spectral decomposition
+    Cross-domain: code ↔ finance ↔ biology ↔ language.
     """
     try:
-        op = req.operation
-        if op == "centroid":
-            if not req.points: raise HTTPException(400, "points required")
-            return {"centroid": compute_centroid(req.points)}
-
-        if op == "area":
-            if not req.points: raise HTTPException(400, "points required")
-            return {"area": compute_convex_hull_area(req.points)}
-
-        if op == "fractal_dim":
-            if not req.sequence: raise HTTPException(400, "sequence required")
-            return {"fractal_dimension": compute_fractal_dimension(req.sequence)}
-
-        if op == "symmetry":
-            if not req.points: raise HTTPException(400, "points required")
-            return detect_symmetry(req.points)
-
-        if op == "spectral":
-            if not req.sequence: raise HTTPException(400, "sequence required")
-            return spectral_analysis(req.sequence)
-
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(500, str(e))
+        fa = fingerprint(req.domain_a)
+        fb = fingerprint(req.domain_b)
+        score, va, vb = similarity(fa, fb)
+        return IsoResponse(
+            similarity=round(float(score), 6),
+            vector_a=va.tolist(),
+            vector_b=vb.tolist(),
+            breakdown={
+                "compression":   {"a": fa["compression"], "b": fb["compression"]},
+                "mi_profile":    {"a": fa["mi"], "b": fb["mi"]},
+                "spectral_gap":  {"a": fa["lambda2"], "b": fb["lambda2"]},
+                "persistence":   {"a": fa["entropy"], "b": fb["entropy"]},
+                "note": (
+                    "Hybrid invariant: C=LZ77 K(x) bound, MI=dependency structure, "
+                    "λ₂=algebraic connectivity class, Hₚ=Lipschitz-stable topology"
+                )
+            }
+        )
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
-@app.post("/linguistic", summary="Linguistic patterns & anonymization")
-def linguistic(req: LinguisticRequest) -> dict:
+@app.post("/ricci-flow")
+def ricci_flow_endpoint(req: RicciRequest):
     """
-    Analyse linguistic patterns and anonymize text.
-
-    **operations:**
-    - `ngram` — n-gram frequency profile
-    - `fingerprint` — authorship style fingerprint
-    - `anonymize` — redact / pseudonymize PII
-    - `detect_patterns` — detect PII without redacting
+    Discrete Ollivier-Ricci flow on embedding neighborhood graph.
+    Redistributes curvature so overloaded semantic regions flatten,
+    sparse regions contract. Implements Semantic Ricci Flow (SRF).
     """
     try:
-        op = req.operation
-        if op == "ngram":
-            return ngram_profile(req.text, req.n or 2, req.top_k or 20)
-        if op == "fingerprint":
-            return style_fingerprint(req.text)
-        if op == "anonymize":
-            return anonymize_text(req.text, req.strategy or "redact")
-        if op == "detect_patterns":
-            return detect_patterns(req.text)
-
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(500, str(e))
+        return ricci_flow(req.embeddings, req.iterations, req.dt)
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
-# ── ChatGPT plugin manifest ───────────────────────────────────────────────────
+@app.post("/entropy-field")
+def entropy_field_endpoint(req: EntropyRequest):
+    """
+    Local entropy tensor H(t) over a sequence.
+    Returns inflation mask: high-entropy regions expand (creative),
+    low-entropy regions contract (precise). Backs Semantic Inflation Fields (SIF).
+    """
+    try:
+        return entropy_field(req.sequence, req.window_size, req.stride)
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
-@app.get("/.well-known/ai-plugin.json", include_in_schema=False)
+
+@app.post("/gradient-tunnel")
+def gradient_tunnel_endpoint(req: TunnelRequest):
+    """
+    Gradient Tunneling Resonance (GTR): inject stochastic resonance
+    noise tuned to local Hessian eigenvalues to escape flat loss basins.
+    Returns perturbed surface + escape path coordinates.
+    """
+    try:
+        return gradient_tunnel(req.loss_surface, req.noise_scale, req.hessian_approx)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/horizon")
+def horizon_endpoint(req: HorizonRequest):
+    """
+    Token Horizon Bifurcation (THB) + Context Event Horizon (CEH).
+    Splits at context boundary. Exterior tokens become Hawking radiation:
+    a compressed entropy signature that reconstructs "forgotten" context.
+    """
+    try:
+        return context_horizon(req.sequence, req.window_size, req.radiation_dims)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/cipher")
+def cipher(req: CipherRequest):
+    """
+    Cipher generation + cross-domain structural isomorphism (legacy).
+    Modes: substitution, polyalphabetic, transposition, lsystem, numeric, isomorphism.
+    """
+    if req.mode == "isomorphism":
+        if not req.domain_a or not req.domain_b:
+            raise HTTPException(400, "domain_a and domain_b required for isomorphism mode")
+        fa = fingerprint(req.domain_a)
+        fb = fingerprint(req.domain_b)
+        score, va, vb = similarity(fa, fb)
+        return {
+            "mode": "isomorphism",
+            "similarity": round(float(score) * 100, 2),
+            "vector_a": va.tolist(), "vector_b": vb.tolist(),
+        }
+
+    if not CIPHAGE_AVAILABLE:
+        raise HTTPException(501, "ciphage_gen module not available")
+    
+    text = req.text or "EVEZ"
+    seed = req.seed or "evez666"
+    
+    if req.mode == "substitution":
+        return generate_substitution_cipher(text, seed)
+    elif req.mode == "polyalphabetic":
+        return generate_polyalphabetic_cipher(text, seed)
+    elif req.mode == "transposition":
+        return generate_transposition_cipher(text, seed)
+    elif req.mode == "lsystem":
+        return generate_lsystem_fractal(req.rule or "F+F-F-F+F", req.steps or 3)
+    elif req.mode == "numeric":
+        return generate_numeric_sequence(req.sequence_type or "collatz", req.n or 10)
+    else:
+        raise HTTPException(400, f"Unknown mode: {req.mode}")
+
+
+@app.post("/geometric")
+def geometric(req: GeometricRequest):
+    """
+    Geometric / spectral / fractal analysis.
+    Modes: fractal (box-counting), spectral (DFT), symmetry (rotational), hull, centroid.
+    """
+    if not GEOMETRIC_AVAILABLE:
+        # Fallback: basic geometric computations
+        if req.points:
+            pts = req.points
+            cx = sum(p[0] for p in pts) / len(pts)
+            cy = sum(p[1] for p in pts) / len(pts)
+            return {"mode": req.mode, "centroid": [cx, cy], "count": len(pts)}
+        raise HTTPException(501, "geometric module not available")
+    
+    if req.mode == "fractal":
+        return compute_fractal_dimension(req.points or [])
+    elif req.mode == "spectral":
+        return compute_spectral_analysis(req.signal or [])
+    elif req.mode == "symmetry":
+        return compute_rotational_symmetry(req.points or [])
+    elif req.mode == "hull":
+        return compute_convex_hull_area(req.points or [])
+    elif req.mode == "centroid":
+        return compute_centroid(req.points or [])
+    else:
+        raise HTTPException(400, f"Unknown mode: {req.mode}")
+
+
+@app.post("/linguistic")
+def linguistic(req: LinguisticRequest):
+    """
+    Linguistic pattern analysis: n-gram profiles, authorship fingerprinting, PII anonymization.
+    """
+    if not LINGUISTIC_AVAILABLE:
+        # Fallback: basic n-gram
+        from collections import Counter
+        tokens = req.text.split()
+        n = req.n or 2
+        ngrams = [" ".join(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
+        return {"mode": req.mode, "ngrams": Counter(ngrams).most_common(20)}
+    
+    if req.mode == "ngram":
+        return compute_ngram_profile(req.text, req.n or 2)
+    elif req.mode == "authorship":
+        return compute_authorship_fingerprint(req.text)
+    elif req.mode == "anonymize":
+        return anonymize_pii(req.text)
+    else:
+        raise HTTPException(400, f"Unknown mode: {req.mode}")
+
+
+# ══════════════════════════════════════════════════════════════
+# CHATGPT PLUGIN MANIFESTS
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/.well-known/ai-plugin.json")
 def plugin_manifest():
+    base = os.getenv("VERCEL_URL", "autoenveloper.vercel.app")
+    if not base.startswith("http"):
+        base = f"https://{base}"
     return JSONResponse({
         "schema_version": "v1",
-        "name_for_human":  "Autoenveloper",
-        "name_for_model":  "autoenveloper",
-        "description_for_human":
-            "Cipher generation, cross-domain isomorphism, geometric analysis, "
-            "linguistic fingerprinting, and text anonymization.",
-        "description_for_model":
-            "Use autoenveloper to: (1) generate deterministic cipher patterns "
-            "from a seed string, (2) detect structural isomorphism between two "
-            "text domains (e.g. code vs finance), (3) run geometric/spectral "
-            "analysis on point clouds or numeric sequences, (4) produce n-gram "
-            "profiles and style fingerprints of text, (5) anonymize PII.",
+        "name_for_human": "EVEZ Autoenveloper",
+        "name_for_model": "autoenveloper",
+        "description_for_human": "Cross-domain structural isomorphism detector + spacetime operators. Fingerprints any text with compression, mutual information, spectral gap, persistence entropy.",
+        "description_for_model": "Mathematical invariant API. Use /isomorphism to compare structural similarity across any domains (code, finance, biology, language). Use /ricci-flow, /entropy-field, /gradient-tunnel, /horizon for spacetime field operations on sequences and embeddings.",
         "auth": {"type": "none"},
-        "api": {
-            "type": "openapi",
-            "url":  f"{BASE_URL}/openapi.json",
-        },
-        "logo_url":     f"{BASE_URL}/logo.png",
-        "contact_email":"support@autoenveloper.dev",
-        "legal_info_url": f"{BASE_URL}/legal",
+        "api": {"type": "openapi", "url": f"{base}/openapi.json"},
+        "logo_url": f"{base}/logo.png",
+        "contact_email": "fiersteity@gmail.com",
+        "legal_info_url": f"{base}/legal"
     })
+
+
+@app.get("/openapi.json")
+def openapi():
+    return app.openapi()
