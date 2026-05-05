@@ -1,0 +1,221 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EVEZ Autoenveloper",
+    "description": "Multi-basis structural invariant detector. Computes \u03a6(x) fingerprint and S(x,y) cross-domain isomorphism. Spacetime operators: Ricci flow, entropy fields, gradient tunneling, context horizons.",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://autoenveloper.vercel.app"
+    }
+  ],
+  "paths": {
+    "/isomorphism": {
+      "post": {
+        "operationId": "isomorphism",
+        "summary": "Compute structural similarity between two domains",
+        "description": "Uses \u03a6(x)=[C(x), I\u2081..I\u2085(x), \u03bb\u2082(x), H\u209a(x)] fingerprint. S(x,y)=\u221a(cos(\u03a6x,\u03a6y)\u00b7(1-JS(\u03a6x,\u03a6y))). Works across code, finance, biology, language, math.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "domain_a",
+                  "domain_b"
+                ],
+                "properties": {
+                  "domain_a": {
+                    "type": "string",
+                    "description": "First domain text/code/sequence"
+                  },
+                  "domain_b": {
+                    "type": "string",
+                    "description": "Second domain text/code/sequence"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Similarity score + breakdown"
+          }
+        }
+      }
+    },
+    "/ricci-flow": {
+      "post": {
+        "operationId": "ricciFlow",
+        "summary": "Apply Ricci curvature flow to embedding vectors",
+        "description": "Discrete Ollivier-Ricci flow. Redistributes curvature so overloaded semantic regions flatten, sparse regions contract. Input: list of embedding vectors.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "embeddings"
+                ],
+                "properties": {
+                  "embeddings": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    },
+                    "description": "List of embedding vectors"
+                  },
+                  "iterations": {
+                    "type": "integer",
+                    "default": 10
+                  },
+                  "dt": {
+                    "type": "number",
+                    "default": 0.01
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Curvature-adjusted vectors + history"
+          }
+        }
+      }
+    },
+    "/entropy-field": {
+      "post": {
+        "operationId": "entropyField",
+        "summary": "Compute local entropy tensor over sequence",
+        "description": "Returns H(t) field: which regions of the sequence have high entropy (expand = creative) vs low entropy (contract = precise). Backs Semantic Inflation Fields.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sequence"
+                ],
+                "properties": {
+                  "sequence": {
+                    "type": "string"
+                  },
+                  "window_size": {
+                    "type": "integer",
+                    "default": 16
+                  },
+                  "stride": {
+                    "type": "integer",
+                    "default": 4
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entropy field + inflation mask"
+          }
+        }
+      }
+    },
+    "/gradient-tunnel": {
+      "post": {
+        "operationId": "gradientTunnel",
+        "summary": "Inject resonance noise to escape loss landscape flat basins",
+        "description": "Gradient Tunneling Resonance (GTR). Noise tuned to local Hessian eigenvalues. Returns perturbed surface + escape path coordinates.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "loss_surface"
+                ],
+                "properties": {
+                  "loss_surface": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "description": "1D loss curve samples"
+                  },
+                  "noise_scale": {
+                    "type": "number",
+                    "default": 0.1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perturbed surface + escape paths"
+          }
+        }
+      }
+    },
+    "/horizon": {
+      "post": {
+        "operationId": "contextHorizon",
+        "summary": "Context event horizon \u2014 Hawking radiation encoding",
+        "description": "Bifurcates sequence at context window. Tokens beyond the horizon become Hawking radiation: a compressed entropy signature preserving the thermodynamic footprint of lost context.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sequence"
+                ],
+                "properties": {
+                  "sequence": {
+                    "type": "string"
+                  },
+                  "window_size": {
+                    "type": "integer",
+                    "default": 512
+                  },
+                  "radiation_dims": {
+                    "type": "integer",
+                    "default": 32
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Interior state + radiation vector + phase"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "System health check",
+        "responses": {
+          "200": {
+            "description": "Status + module availability"
+          }
+        }
+      }
+    }
+  }
+}
